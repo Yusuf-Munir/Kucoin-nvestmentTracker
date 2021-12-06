@@ -170,23 +170,41 @@ namespace CryptoOrderTrackerLambda
         {
             float dbCryptoAmount = float.Parse(updatedInvestment.Available);
             float kucoinCryptoAmount = float.Parse(kuInvestment.Available);
-            float cryptoDifference = kucoinCryptoAmount - dbCryptoAmount;
 
             if (kucoinCryptoAmount < dbCryptoAmount)
             {
                 // it has been sold
                 updatedInvestment.BuyOrSell = "SELL";
-                updatedInvestment.AmountBoughtOrSold = $"-{cryptoDifference}";
-            } 
+                updatedInvestment.AmountBoughtOrSold = $"{dbCryptoAmount - kucoinCryptoAmount}";
+                updatedInvestment.Price = GetCryptoCurrentPrice(updatedInvestment.Crypto, context).ToString();
+                updatedInvestment.MoneyMadeFromSale = 
+                    (float.Parse(updatedInvestment.AmountBoughtOrSold) * 
+                    float.Parse(updatedInvestment.Price)).ToString();
+
+                updatedInvestment.TotalAmount =
+                    (float.Parse(investmentHistoryJson.History[^1].TotalAmount) -
+                    float.Parse(updatedInvestment.MoneyMadeFromSale)) <= 0 ? "0" : 
+                    (float.Parse(investmentHistoryJson.History[^1].TotalAmount) -
+                    float.Parse(updatedInvestment.MoneyMadeFromSale)).ToString(); ;
+
+                updatedInvestment.Average =
+                    (float.Parse(updatedInvestment.TotalAmount) /
+                    float.Parse(kuInvestment.Available)).ToString();
+            }
             else if (kucoinCryptoAmount > dbCryptoAmount)
             {
+                float cryptoDifference = kucoinCryptoAmount - dbCryptoAmount;
+
                 updatedInvestment.BuyOrSell = "BUY";
-                updatedInvestment.AmountBoughtOrSold = $"+{cryptoDifference}";
+                updatedInvestment.AmountBoughtOrSold = $"{cryptoDifference}";
                 updatedInvestment.Price = GetCryptoCurrentPrice(updatedInvestment.Crypto, context).ToString();
                 updatedInvestment.AmountPaid = (cryptoDifference * float.Parse(updatedInvestment.Price)).ToString();
                 updatedInvestment.TotalAmount = 
                     (float.Parse(investmentHistoryJson.History[^1].TotalAmount) + 
                     float.Parse(updatedInvestment.AmountPaid)).ToString();
+                updatedInvestment.Average = 
+                    (float.Parse(updatedInvestment.TotalAmount) / 
+                    float.Parse(kuInvestment.Available)).ToString();
             } 
             else
             {
@@ -195,7 +213,6 @@ namespace CryptoOrderTrackerLambda
             }
 
             updatedInvestment.Available = kuInvestment.Available;
-            updatedInvestment.Average = "FIX THIS";
             updatedInvestment.DateTime = DateTime.Now.ToString();
             investmentHistoryJson.History.Add(updatedInvestment);
             string investmentHistoryString = JsonConvert.SerializeObject(investmentHistoryJson, Formatting.Indented);
@@ -262,7 +279,7 @@ namespace CryptoOrderTrackerLambda
                 Average = investmentPrice,
                 AmountPaid = (float.Parse(investment.Available) * float.Parse(investmentPrice)).ToString(),
                 TotalAmount = (float.Parse(investment.Available) * float.Parse(investmentPrice)).ToString(),
-                ProfitOrLoss = "",
+                MoneyMadeFromSale = "",
                 DateTime = DateTime.Now.ToString()
             };
 
@@ -275,6 +292,7 @@ namespace CryptoOrderTrackerLambda
                 TableName = tableName,
                 Item = new Dictionary<string, AttributeValue>() {
                     {"Crypto", new AttributeValue { S = investmentToAdd.Crypto }},
+                    {"Spent", new AttributeValue { S = investmentToAdd.TotalAmount }},
                     {"Available", new AttributeValue { S = investment.Available }},
                     {"Average", new AttributeValue { S = investmentPrice }},
                     {"History", new AttributeValue { S = history }}
@@ -305,6 +323,11 @@ namespace CryptoOrderTrackerLambda
         {
             AmazonDynamoDBClient dynamoDbClient = new AmazonDynamoDBClient();
             Dictionary<string, AttributeValueUpdate> updates = new Dictionary<string, AttributeValueUpdate>();
+            updates["Spent"] = new AttributeValueUpdate()
+            {
+                Action = AttributeAction.PUT,
+                Value = new AttributeValue { S = investment.TotalAmount }
+            };
             updates["Available"] = new AttributeValueUpdate()
             {
                 Action = AttributeAction.PUT,
