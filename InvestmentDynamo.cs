@@ -52,7 +52,7 @@ namespace CryptoOrderTrackerLambda
         /// <summary>
         /// The profit or loss for the sale.
         /// </summary>
-        public string ProfitOrLoss { get; set; }
+        public string MoneyMadeFromSale { get; set; }
 
         /// <summary>
         /// The DateTime the crypto was bought/sold at (to help differentiate multiple items with same crypto).
